@@ -10,20 +10,109 @@ import { cn } from "@/lib/utils";
 interface IconData {
   id: string;
   name: string;
+  col: number;
+  row: number;
+  /** Pixel position of the icon's top-left corner (kept in sync with col/row) */
   x: number;
   y: number;
 }
 
+// ─── Icon dimensions ──────────────────────────────────────────────────────────
+
 const ICON_W = 80;
 const ICON_H = 90;
 
-// ─── Spring config for rotation return-to-zero ────────────────────────────────
-// stiffness / damping tuned so the icon snaps back crisply without oscillating.
-const SPRING_CFG = { stiffness: 160, damping: 20, mass: 0.4 };
+// ─── Grid constants ───────────────────────────────────────────────────────────
 
-// Max tilt angle (degrees) and velocity scale factor
-const MAX_ROT   = 15;              // ° cap
-const VEL_SCALE = 0.022;          // maps px/s → degrees
+const CELL_W    = 100;   // horizontal slot pitch (px)
+const CELL_H    = 108;   // vertical slot pitch (px)
+const GRID_PAD  = 24;    // padding from viewport edges (px)
+
+// ─── Spring configs ───────────────────────────────────────────────────────────
+
+// Rotation: quick & loose (high stiffness, low damping → snappy but bouncy)
+const ROT_SPRING  = { stiffness: 300, damping: 12, mass: 0.3 };
+
+// Snap-to-slot: firm spring, no overshoot
+const SNAP_SPRING = { type: "spring" as const, stiffness: 450, damping: 35 };
+
+// While dragging: instant position tracking (no animation lag)
+const DRAG_TRANS  = { duration: 0 } as const;
+
+// Max tilt angle (degrees) and velocity → degrees scale factor
+const MAX_ROT   = 15;
+const VEL_SCALE = 0.028;
+
+// ─── Grid helpers ─────────────────────────────────────────────────────────────
+
+function gridDims(vw: number, vh: number) {
+  const cols = Math.max(1, Math.floor((vw - GRID_PAD * 2) / CELL_W));
+  const rows = Math.max(1, Math.floor((vh - GRID_PAD * 2) / CELL_H));
+  return { cols, rows };
+}
+
+/** Top-left pixel coordinate of a grid slot */
+function slotPos(col: number, row: number) {
+  return {
+    x: GRID_PAD + col * CELL_W + Math.round((CELL_W - ICON_W) / 2),
+    y: GRID_PAD + row * CELL_H + Math.round((CELL_H - ICON_H) / 2),
+  };
+}
+
+/** Which grid slot is closest to the icon's current pixel centre */
+function nearestSlot(
+  iconX: number,
+  iconY: number,
+  cols: number,
+  rows: number,
+): { col: number; row: number } {
+  const cx = iconX + ICON_W / 2;
+  const cy = iconY + ICON_H / 2;
+  const col = Math.max(0, Math.min(cols - 1, Math.round((cx - GRID_PAD - CELL_W / 2) / CELL_W)));
+  const row = Math.max(0, Math.min(rows - 1, Math.round((cy - GRID_PAD - CELL_H / 2) / CELL_H)));
+  return { col, row };
+}
+
+/** BFS outward from (targetCol, targetRow) to find the nearest free slot */
+function findFreeSlot(
+  targetCol: number,
+  targetRow: number,
+  occupied: Set<string>,
+  cols: number,
+  rows: number,
+): { col: number; row: number } {
+  const key = (c: number, r: number) => `${c},${r}`;
+  const queue: Array<{ col: number; row: number }> = [{ col: targetCol, row: targetRow }];
+  const visited = new Set<string>([key(targetCol, targetRow)]);
+
+  while (queue.length > 0) {
+    const slot = queue.shift()!;
+    if (!occupied.has(key(slot.col, slot.row))) return slot;
+
+    const neighbors = [
+      { col: slot.col - 1, row: slot.row },
+      { col: slot.col + 1, row: slot.row },
+      { col: slot.col,     row: slot.row - 1 },
+      { col: slot.col,     row: slot.row + 1 },
+      { col: slot.col - 1, row: slot.row - 1 },
+      { col: slot.col + 1, row: slot.row - 1 },
+      { col: slot.col - 1, row: slot.row + 1 },
+      { col: slot.col + 1, row: slot.row + 1 },
+    ];
+
+    for (const n of neighbors) {
+      if (n.col < 0 || n.col >= cols || n.row < 0 || n.row >= rows) continue;
+      const k = key(n.col, n.row);
+      if (!visited.has(k)) {
+        visited.add(k);
+        queue.push(n);
+      }
+    }
+  }
+
+  // Fallback: target slot (shouldn't happen on a non-full grid)
+  return { col: targetCol, row: targetRow };
+}
 
 // ─── Desktop Icon ─────────────────────────────────────────────────────────────
 
@@ -31,22 +120,25 @@ function DesktopIcon({
   icon,
   selected,
   zIndex,
+  isDragging,
   rotationMV,
   onPointerDown,
 }: {
   icon: IconData;
   selected: boolean;
   zIndex: number;
+  isDragging: boolean;
   rotationMV: MotionValue<number>;
   onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
 }) {
-  // Spring smooths both the live rotation and the return-to-zero snap
-  const rotate = useSpring(rotationMV, SPRING_CFG);
+  const rotate = useSpring(rotationMV, ROT_SPRING);
 
   return (
     <motion.div
       className="absolute flex flex-col items-center gap-[4px] w-20 select-none touch-none cursor-default"
-      style={{ left: icon.x, top: icon.y, zIndex, rotate }}
+      animate={{ x: icon.x, y: icon.y }}
+      transition={isDragging ? DRAG_TRANS : SNAP_SPRING}
+      style={{ zIndex, rotate }}
       onPointerDown={onPointerDown}
     >
       {/* Icon glyph */}
@@ -83,12 +175,10 @@ function DesktopIcon({
 // ─── Desktop Surface ──────────────────────────────────────────────────────────
 
 export function Desktop() {
-  const [icons, setIcons] = useState<IconData[]>([
-    { id: "praneeth", name: "Praneeth", x: -999, y: -999 },
-    { id: "womp",     name: "Womp",     x: -999, y: -999 },
-  ]);
-  const [ready,      setReady]      = useState(false);
+  const [icons, setIcons]       = useState<IconData[]>([]);
+  const [ready, setReady]       = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const zCounter = useRef(10);
   const [zMap, setZMap] = useState<Record<string, number>>({ praneeth: 1, womp: 1 });
@@ -99,18 +189,22 @@ export function Desktop() {
     womp:     motionValue(0),
   });
 
-  // ── Centre icons after mount ─────────────────────────────────────────────
+  // ── Place icons in grid slots after mount ────────────────────────────────
   useEffect(() => {
-    const gap    = 36;
-    const totalW = ICON_W * 2 + gap;
-    const vw     = window.innerWidth;
-    const vh     = window.innerHeight - 28;
-    const x0     = Math.round((vw - totalW) / 2);
-    const y0     = Math.round((vh - ICON_H)  / 2);
+    const vw = window.innerWidth;
+    const vh = window.innerHeight - 28; // subtract menu bar
+    const { cols, rows } = gridDims(vw, vh);
+
+    // Centre the pair horizontally: slots at (midCol, midRow) and (midCol+1, midRow)
+    const midRow = Math.floor(rows / 2);
+    const midCol = Math.max(0, Math.floor((cols - 2) / 2));
+
+    const pos0 = slotPos(midCol,     midRow);
+    const pos1 = slotPos(Math.min(midCol + 1, cols - 1), midRow);
 
     setIcons([
-      { id: "praneeth", name: "Praneeth", x: x0,                y: y0 },
-      { id: "womp",     name: "Womp",     x: x0 + ICON_W + gap, y: y0 },
+      { id: "praneeth", name: "Praneeth", col: midCol,     row: midRow, ...pos0 },
+      { id: "womp",     name: "Womp",     col: Math.min(midCol + 1, cols - 1), row: midRow, ...pos1 },
     ]);
     setReady(true);
   }, []);
@@ -131,7 +225,7 @@ export function Desktop() {
   // Velocity tracking — all refs so updates never trigger re-renders
   const prevDragX    = useRef<number | null>(null);
   const prevDragTime = useRef<number | null>(null);
-  const smoothedVelX = useRef(0);           // EMA-smoothed horizontal velocity
+  const smoothedVelX = useRef(0); // EMA-smoothed horizontal velocity (px/s)
 
   // ── Global pointer listeners (mounted once) ──────────────────────────────
   useEffect(() => {
@@ -155,10 +249,10 @@ export function Desktop() {
       // ── Velocity → rotation ───────────────────────────────────────────────
       const now = performance.now();
       if (prevDragX.current !== null && prevDragTime.current !== null) {
-        const dt     = Math.max(now - prevDragTime.current, 1); // ms, avoid ÷0
+        const dt     = Math.max(now - prevDragTime.current, 1);
         const rawVel = (e.clientX - prevDragX.current) / dt * 1000; // px/s
 
-        // Exponential moving average: smooths frame-to-frame jitter (α = 0.35)
+        // EMA (α = 0.35) to smooth frame-to-frame jitter
         smoothedVelX.current = smoothedVelX.current * 0.65 + rawVel * 0.35;
 
         const target = Math.max(-MAX_ROT, Math.min(MAX_ROT, smoothedVelX.current * VEL_SCALE));
@@ -170,17 +264,44 @@ export function Desktop() {
 
     const onUp = () => {
       if (!dragging.current) return;
-      if (!dragging.current.moved) setSelectedId(dragging.current.id);
+      const { id, moved } = dragging.current;
 
-      // Spring the icon back to upright
-      rotationMVs.current[dragging.current.id]?.set(0);
+      if (!moved) {
+        setSelectedId(id);
+      } else {
+        // ── Snap to nearest free grid slot ───────────────────────────────
+        const vw = window.innerWidth;
+        const vh = window.innerHeight - 28;
+        const { cols, rows } = gridDims(vw, vh);
 
-      // Reset velocity state
+        const current = iconsRef.current.find((i) => i.id === id)!;
+        const { col: targetCol, row: targetRow } = nearestSlot(current.x, current.y, cols, rows);
+
+        const occupied = new Set(
+          iconsRef.current
+            .filter((i) => i.id !== id)
+            .map((i) => `${i.col},${i.row}`)
+        );
+
+        const { col, row } = findFreeSlot(targetCol, targetRow, occupied, cols, rows);
+        const pos = slotPos(col, row);
+
+        setIcons((prev) =>
+          prev.map((ic) =>
+            ic.id === id ? { ...ic, col, row, x: pos.x, y: pos.y } : ic
+          )
+        );
+      }
+
+      // Return icon to upright
+      rotationMVs.current[id]?.set(0);
+
+      // Clear drag state
       prevDragX.current    = null;
       prevDragTime.current = null;
       smoothedVelX.current = 0;
-
-      dragging.current = null;
+      dragging.current     = null;
+      setDraggingId(null);
     };
 
     window.addEventListener("pointermove", onMove, { passive: false });
@@ -207,11 +328,11 @@ export function Desktop() {
         moved:       false,
       };
 
-      // Seed velocity tracking from this exact point
       prevDragX.current    = e.clientX;
       prevDragTime.current = performance.now();
       smoothedVelX.current = 0;
 
+      setDraggingId(id);
       setZMap((prev) => ({ ...prev, [id]: ++zCounter.current }));
     },
     []
@@ -236,6 +357,7 @@ export function Desktop() {
             icon={icon}
             selected={selectedId === icon.id}
             zIndex={zMap[icon.id]}
+            isDragging={draggingId === icon.id}
             rotationMV={rotationMVs.current[icon.id]}
             onPointerDown={(e) => handleIconPointerDown(icon.id, e)}
           />
