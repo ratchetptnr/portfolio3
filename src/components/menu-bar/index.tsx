@@ -9,6 +9,12 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Wifi, BatteryMedium, Search, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,34 +32,76 @@ function AppleLogo() {
   );
 }
 
-// ─── Live Clock ───────────────────────────────────────────────────────────────
+// ─── Analog Clock SVG ─────────────────────────────────────────────────────────
 
-function Clock() {
-  const [now, setNow] = useState<Date | null>(null);
+function AnalogClock({ date }: { date: Date }) {
+  const h = date.getHours() % 12;
+  const m = date.getMinutes();
+  const s = date.getSeconds();
 
-  useEffect(() => {
-    setNow(new Date());
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  const secDeg  = s * 6;
+  const minDeg  = m * 6 + s * 0.1;
+  const hourDeg = h * 30 + m * 0.5;
 
-  if (!now) return null;
+  const toRad = (deg: number) => (deg - 90) * (Math.PI / 180);
+  const cx = 80, cy = 80;
 
-  const date = now.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-  const time = now.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
+  const hand = (deg: number, len: number) => ({
+    x2: cx + len * Math.cos(toRad(deg)),
+    y2: cy + len * Math.sin(toRad(deg)),
   });
 
   return (
-    <span className="tabular-nums">
-      {date}&nbsp;&nbsp;{time}
-    </span>
+    <svg width="160" height="160" viewBox="0 0 160 160" className="mx-auto">
+      {/* Face */}
+      <circle cx={cx} cy={cy} r="72" className="fill-background stroke-border" strokeWidth="1.5" />
+
+      {/* Hour markers */}
+      {Array.from({ length: 12 }).map((_, i) => {
+        const a = toRad(i * 30 + 90); // +90 because toRad subtracts 90
+        const isMajor = i % 3 === 0;
+        const outerR = 68, innerR = isMajor ? 56 : 61;
+        return (
+          <line
+            key={i}
+            x1={cx + outerR * Math.cos(a)} y1={cy + outerR * Math.sin(a)}
+            x2={cx + innerR * Math.cos(a)} y2={cy + innerR * Math.sin(a)}
+            className="stroke-foreground/50"
+            strokeWidth={isMajor ? 2 : 1}
+            strokeLinecap="round"
+          />
+        );
+      })}
+
+      {/* Hour hand */}
+      <line
+        x1={cx} y1={cy}
+        {...hand(hourDeg, 42)}
+        className="stroke-foreground"
+        strokeWidth="3.5" strokeLinecap="round"
+      />
+
+      {/* Minute hand */}
+      <line
+        x1={cx} y1={cy}
+        {...hand(minDeg, 58)}
+        className="stroke-foreground"
+        strokeWidth="2.5" strokeLinecap="round"
+      />
+
+      {/* Second hand — red, thinner */}
+      <line
+        x1={cx + 14 * Math.cos(toRad(secDeg + 180))}
+        y1={cy + 14 * Math.sin(toRad(secDeg + 180))}
+        {...hand(secDeg, 64)}
+        stroke="#ef4444"
+        strokeWidth="1.25" strokeLinecap="round"
+      />
+
+      {/* Center pivot */}
+      <circle cx={cx} cy={cy} r="3.5" className="fill-foreground" />
+      <circle cx={cx} cy={cy} r="1.5" fill="#ef4444" />
+    </svg>
   );
 }
 
@@ -75,14 +123,21 @@ const SC = ({ children }: { children: string }) => (
 
 export function MenuBar() {
   const [activeMenu, setActiveMenu] = useState<MenuId | null>(null);
+  const [clockOpen, setClockOpen]   = useState(false);
+  const [now, setNow]               = useState<Date | null>(null);
+
+  // Single shared timer for both the text clock and the analog clock
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   /** Click to open / close */
   const handleOpenChange = (id: MenuId, open: boolean) => {
     if (open) {
       setActiveMenu(id);
     } else {
-      // Only clear if this menu is still the active one
-      // (prevents race when hover-switching clears the new menu)
       setActiveMenu((prev) => (prev === id ? null : prev));
     }
   };
@@ -105,17 +160,23 @@ export function MenuBar() {
   const sysTriggerCls =
     "px-[9px] h-full flex items-center gap-1.5 text-[13px] text-foreground/90 hover:bg-foreground/10 rounded-[4px] transition-colors duration-75 cursor-default select-none";
 
-  // Shared props for every DropdownMenu
   const menuProps = (id: MenuId) => ({
     open: activeMenu === id,
     onOpenChange: (o: boolean) => handleOpenChange(id, o),
   });
 
-  // Shared props for every DropdownMenuTrigger
   const triggerProps = (id: MenuId) => ({
     className: triggerCls(id),
     onMouseEnter: () => handleMouseEnter(id),
   });
+
+  // Formatted strings for the menu-bar text clock
+  const dateStr = now?.toLocaleDateString("en-US", {
+    weekday: "short", month: "short", day: "numeric",
+  }) ?? "";
+  const timeStr = now?.toLocaleTimeString("en-US", {
+    hour: "numeric", minute: "2-digit", hour12: true,
+  }) ?? "";
 
   return (
     <div className="fixed top-0 left-0 right-0 z-[100] h-7 flex items-center justify-between px-1 select-none bg-background/80 backdrop-blur-2xl backdrop-saturate-150 border-b border-border">
@@ -276,10 +337,50 @@ export function MenuBar() {
           <span className="text-[12px]">87%</span>
         </button>
 
-        {/* Clock */}
-        <button className={cn(sysTriggerCls, "px-3 text-[13px]")} aria-label="Date and Time">
-          <Clock />
-        </button>
+        {/* Clock — opens analog clock + calendar popover */}
+        <Popover open={clockOpen} onOpenChange={setClockOpen}>
+          <PopoverTrigger asChild>
+            <button
+              className={cn(
+                sysTriggerCls,
+                "px-3 text-[13px] tabular-nums",
+                clockOpen && "bg-foreground/10"
+              )}
+              aria-label="Date and Time"
+            >
+              {dateStr}&nbsp;&nbsp;{timeStr}
+            </button>
+          </PopoverTrigger>
+
+          <PopoverContent
+            className="menubar-dropdown w-[280px] p-0 shadow-2xl rounded-xl border-border overflow-hidden"
+            sideOffset={4}
+            align="end"
+          >
+            {/* Analog clock */}
+            <div className="px-4 pt-5 pb-3 flex flex-col items-center gap-1 border-b border-border/60">
+              {now && <AnalogClock date={now} />}
+              <p className="text-[22px] font-light tabular-nums text-foreground/90 tracking-tight">
+                {timeStr}
+              </p>
+              <p className="text-[12px] text-foreground/50 pb-1">
+                {now?.toLocaleDateString("en-US", {
+                  weekday: "long", year: "numeric", month: "long", day: "numeric",
+                })}
+              </p>
+            </div>
+
+            {/* Calendar */}
+            <div className="p-2">
+              <Calendar
+                mode="single"
+                selected={now ?? undefined}
+                onSelect={() => {}}
+                className="w-full"
+              />
+            </div>
+          </PopoverContent>
+        </Popover>
 
       </div>
     </div>
