@@ -127,22 +127,23 @@
 
 /* ── Mac Menu Bar Dropdown Overrides ─────────────────────────────────────── */
 /*
- * We use explicit CSS (not Tailwind utilities) here so the specificity is
- * guaranteed to win over shadcn's semantic color classes.
+ * Explicit CSS wins over shadcn's semantic utility classes.
+ * All colours use the shadcn CSS variables so the dropdown automatically
+ * adapts to light / dark mode without any JavaScript.
  */
 
-/* Dropdown panel */
+/* Dropdown panel — uses popover token (white in light, dark-card in dark) */
 .menubar-dropdown {
-  background: rgba(28, 28, 28, 0.96) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  color: rgba(255, 255, 255, 0.92) !important;
+  background: color-mix(in oklch, var(--popover) 97%, transparent) !important;
+  border-color: var(--border) !important;
+  color: var(--popover-foreground) !important;
   backdrop-filter: blur(24px) saturate(1.8);
   -webkit-backdrop-filter: blur(24px) saturate(1.8);
 }
 
 /* Each row */
 .menubar-dropdown [data-slot="dropdown-menu-item"] {
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--popover-foreground);
   font-size: 13px;
   line-height: 1;
   min-height: 22px;
@@ -151,7 +152,7 @@
   border-radius: 4px;
 }
 
-/* Hover / focus highlight — macOS blue accent */
+/* Hover / focus — macOS-style blue accent (intentional design, same in both modes) */
 .menubar-dropdown [data-slot="dropdown-menu-item"]:focus,
 .menubar-dropdown [data-slot="dropdown-menu-item"][data-highlighted] {
   background: #2563eb !important;
@@ -160,7 +161,7 @@
 
 /* Separator */
 .menubar-dropdown [data-slot="dropdown-menu-separator"] {
-  background: rgba(255, 255, 255, 0.12) !important;
+  background: var(--border) !important;
   height: 1px;
   margin-top: 3px;
   margin-bottom: 3px;
@@ -168,14 +169,14 @@
 
 /* Keyboard shortcut */
 .menubar-dropdown [data-slot="dropdown-menu-shortcut"] {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--muted-foreground);
   font-size: 12px;
   letter-spacing: 0;
   margin-left: auto;
 }
 
-/* Shortcut color inverts when the row is highlighted */
+/* Shortcut becomes white on the blue highlighted row */
 .menubar-dropdown [data-slot="dropdown-menu-item"]:focus [data-slot="dropdown-menu-shortcut"],
 .menubar-dropdown [data-slot="dropdown-menu-item"][data-highlighted] [data-slot="dropdown-menu-shortcut"] {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.75);
 }

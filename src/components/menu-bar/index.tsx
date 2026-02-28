@@ -96,14 +96,14 @@ export function MenuBar() {
 
   const triggerCls = (id: MenuId) =>
     cn(
-      "px-[9px] h-full flex items-center text-[13px] text-white/90",
-      "hover:bg-white/15 rounded-[4px] transition-colors duration-75",
+      "px-[9px] h-full flex items-center text-[13px] text-foreground/90",
+      "hover:bg-foreground/10 rounded-[4px] transition-colors duration-75",
       "focus-visible:outline-none cursor-default select-none",
-      activeMenu === id && "bg-white/15"
+      activeMenu === id && "bg-foreground/10"
     );
 
   const sysTriggerCls =
-    "px-[9px] h-full flex items-center gap-1.5 text-[13px] text-white/90 hover:bg-white/15 rounded-[4px] transition-colors duration-75 cursor-default select-none";
+    "px-[9px] h-full flex items-center gap-1.5 text-[13px] text-foreground/90 hover:bg-foreground/10 rounded-[4px] transition-colors duration-75 cursor-default select-none";
 
   // Shared props for every DropdownMenu
   const menuProps = (id: MenuId) => ({
@@ -118,7 +118,7 @@ export function MenuBar() {
   });
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[100] h-7 flex items-center justify-between px-1 select-none bg-black/80 backdrop-blur-2xl backdrop-saturate-150 border-b border-white/[0.06]">
+    <div className="fixed top-0 left-0 right-0 z-[100] h-7 flex items-center justify-between px-1 select-none bg-background/80 backdrop-blur-2xl backdrop-saturate-150 border-b border-border">
 
       {/* ── LEFT — App menus ───────────────────────────────────────────── */}
       <div className="flex items-center h-full">
@@ -232,7 +232,7 @@ export function MenuBar() {
             <DropdownMenuItem className={ITEM_CLS}>Bring All to Front</DropdownMenuItem>
             <DropdownMenuSeparator className={SEP_CLS} />
             <DropdownMenuItem className={cn(ITEM_CLS, "gap-2")}>
-              <span className="text-white/90">✓</span>
+              <span className="text-foreground/90">✓</span>
               Portfolio
             </DropdownMenuItem>
           </DropdownMenuContent>
