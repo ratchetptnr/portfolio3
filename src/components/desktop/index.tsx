@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, useSpring, motionValue, type MotionValue } from "framer-motion";
 import { FileText } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import { DesktopWindow, WIN_W } from "./window";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,66 @@ interface IconData {
   x: number;
   y: number;
 }
+
+interface OpenWindow {
+  id: string;
+  initialX: number;
+  initialY: number;
+}
+
+// ─── File content ─────────────────────────────────────────────────────────────
+
+const ICON_FILES: Record<string, { title: string; content: string }> = {
+  praneeth: {
+    title: "Praneeth.txt",
+    content: `Praneeth Reddy
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Hey — I'm Praneeth. I design and build
+things for the web.
+
+I care a lot about how things feel. The
+weight of a button, the timing of an
+animation, the right amount of space
+between words.
+
+Been building interfaces for a few years.
+Currently exploring spatial computing and
+whatever comes after that.
+
+→  praneeth@example.com
+→  github.com/praneeth
+→  read.cv/praneeth
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Open to interesting work. Say hi.`,
+  },
+
+  womp: {
+    title: "Womp.txt",
+    content: `womp.txt — classified document
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Contents of this file:
+
+  1. The word "womp" (see below)
+  2. Existential uncertainty
+  3. Nothing else
+
+The word "womp":
+
+      w  o  m  p
+
+There. You've seen it.
+
+Close the window.
+Move on with your life.
+You're doing great.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+File size: unknowable. File age: ancient.`,
+  },
+};
 
 // ─── Icon dimensions ──────────────────────────────────────────────────────────
 
@@ -110,7 +171,6 @@ function findFreeSlot(
     }
   }
 
-  // Fallback: target slot (shouldn't happen on a non-full grid)
   return { col: targetCol, row: targetRow };
 }
 
@@ -175,15 +235,18 @@ function DesktopIcon({
 // ─── Desktop Surface ──────────────────────────────────────────────────────────
 
 export function Desktop() {
-  const [icons, setIcons]       = useState<IconData[]>([]);
-  const [ready, setReady]       = useState(false);
+  const [icons, setIcons]           = useState<IconData[]>([]);
+  const [ready, setReady]           = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [openWindows, setOpenWindows] = useState<OpenWindow[]>([]);
 
   const zCounter = useRef(10);
-  const [zMap, setZMap] = useState<Record<string, number>>({ praneeth: 1, womp: 1 });
+  const [zMap, setZMap] = useState<Record<string, number>>({
+    praneeth: 1, womp: 1,
+  });
 
-  // One MotionValue per icon, created once, never recreated
+  // One MotionValue per icon, created once
   const rotationMVs = useRef<Record<string, MotionValue<number>>>({
     praneeth: motionValue(0),
     womp:     motionValue(0),
@@ -192,22 +255,27 @@ export function Desktop() {
   // ── Place icons in grid slots after mount ────────────────────────────────
   useEffect(() => {
     const vw = window.innerWidth;
-    const vh = window.innerHeight - 28; // subtract menu bar
+    const vh = window.innerHeight - 28;
     const { cols, rows } = gridDims(vw, vh);
 
-    // Centre the pair horizontally: slots at (midCol, midRow) and (midCol+1, midRow)
     const midRow = Math.floor(rows / 2);
     const midCol = Math.max(0, Math.floor((cols - 2) / 2));
 
-    const pos0 = slotPos(midCol,     midRow);
+    const pos0 = slotPos(midCol, midRow);
     const pos1 = slotPos(Math.min(midCol + 1, cols - 1), midRow);
 
     setIcons([
-      { id: "praneeth", name: "Praneeth", col: midCol,     row: midRow, ...pos0 },
+      { id: "praneeth", name: "Praneeth", col: midCol,                         row: midRow, ...pos0 },
       { id: "womp",     name: "Womp",     col: Math.min(midCol + 1, cols - 1), row: midRow, ...pos1 },
     ]);
     setReady(true);
   }, []);
+
+  // ── Refs for use inside stable event-listener closures ───────────────────
+  const iconsRef       = useRef(icons);
+  const openWindowsRef = useRef(openWindows);
+  useEffect(() => { iconsRef.current       = icons;       }, [icons]);
+  useEffect(() => { openWindowsRef.current = openWindows; }, [openWindows]);
 
   // ── Drag state ───────────────────────────────────────────────────────────
   const dragging = useRef<{
@@ -219,13 +287,31 @@ export function Desktop() {
     moved:       boolean;
   } | null>(null);
 
-  const iconsRef = useRef(icons);
-  useEffect(() => { iconsRef.current = icons; }, [icons]);
-
-  // Velocity tracking — all refs so updates never trigger re-renders
+  // Velocity tracking
   const prevDragX    = useRef<number | null>(null);
   const prevDragTime = useRef<number | null>(null);
-  const smoothedVelX = useRef(0); // EMA-smoothed horizontal velocity (px/s)
+  const smoothedVelX = useRef(0);
+
+  // Double-click tracking
+  const lastTapRef = useRef<{ id: string; time: number } | null>(null);
+
+  // ── Open / focus a window ────────────────────────────────────────────────
+  const openOrFocusWindow = useCallback((id: string) => {
+    const alreadyOpen = openWindowsRef.current.some((w) => w.id === id);
+
+    if (alreadyOpen) {
+      // Just bring to front
+      setZMap((prev) => ({ ...prev, [`win_${id}`]: ++zCounter.current }));
+    } else {
+      // Calculate a centered-ish starting position, offset per window count
+      const offset  = openWindowsRef.current.length * 28;
+      const wx = Math.round((window.innerWidth - WIN_W) / 2) + offset;
+      const wy = Math.round((window.innerHeight - 28 - 340) / 2) + 28 + offset;
+
+      setOpenWindows((prev) => [...prev, { id, initialX: wx, initialY: wy }]);
+      setZMap((prev) => ({ ...prev, [`win_${id}`]: ++zCounter.current }));
+    }
+  }, []);
 
   // ── Global pointer listeners (mounted once) ──────────────────────────────
   useEffect(() => {
@@ -233,7 +319,6 @@ export function Desktop() {
       if (!dragging.current) return;
       e.preventDefault();
 
-      // ── Position ─────────────────────────────────────────────────────────
       const dx = e.clientX - dragging.current.startMouseX;
       const dy = e.clientY - dragging.current.startMouseY;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragging.current.moved = true;
@@ -246,15 +331,12 @@ export function Desktop() {
         )
       );
 
-      // ── Velocity → rotation ───────────────────────────────────────────────
+      // Velocity → rotation
       const now = performance.now();
       if (prevDragX.current !== null && prevDragTime.current !== null) {
         const dt     = Math.max(now - prevDragTime.current, 1);
-        const rawVel = (e.clientX - prevDragX.current) / dt * 1000; // px/s
-
-        // EMA (α = 0.35) to smooth frame-to-frame jitter
+        const rawVel = (e.clientX - prevDragX.current) / dt * 1000;
         smoothedVelX.current = smoothedVelX.current * 0.65 + rawVel * 0.35;
-
         const target = Math.max(-MAX_ROT, Math.min(MAX_ROT, smoothedVelX.current * VEL_SCALE));
         rotationMVs.current[dragging.current.id]?.set(target);
       }
@@ -267,7 +349,16 @@ export function Desktop() {
       const { id, moved } = dragging.current;
 
       if (!moved) {
-        setSelectedId(id);
+        // ── Single vs double click detection ─────────────────────────────
+        const now2 = Date.now();
+        if (lastTapRef.current?.id === id && now2 - lastTapRef.current.time < 400) {
+          // Double click → open the file
+          lastTapRef.current = null;
+          openOrFocusWindow(id);
+        } else {
+          lastTapRef.current = { id, time: now2 };
+          setSelectedId(id);
+        }
       } else {
         // ── Snap to nearest free grid slot ───────────────────────────────
         const vw = window.innerWidth;
@@ -293,10 +384,7 @@ export function Desktop() {
         );
       }
 
-      // Return icon to upright
       rotationMVs.current[id]?.set(0);
-
-      // Clear drag state
       prevDragX.current    = null;
       prevDragTime.current = null;
       smoothedVelX.current = 0;
@@ -310,7 +398,7 @@ export function Desktop() {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup",   onUp);
     };
-  }, []);
+  }, [openOrFocusWindow]);
 
   // ── Icon pointer-down ────────────────────────────────────────────────────
   const handleIconPointerDown = useCallback(
@@ -338,6 +426,15 @@ export function Desktop() {
     []
   );
 
+  // ── Window handlers ──────────────────────────────────────────────────────
+  const closeWindow = useCallback((id: string) => {
+    setOpenWindows((prev) => prev.filter((w) => w.id !== id));
+  }, []);
+
+  const focusWindow = useCallback((id: string) => {
+    setZMap((prev) => ({ ...prev, [`win_${id}`]: ++zCounter.current }));
+  }, []);
+
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div
@@ -350,6 +447,7 @@ export function Desktop() {
       }}
       onPointerDown={() => setSelectedId(null)}
     >
+      {/* Desktop icons */}
       {ready &&
         icons.map((icon) => (
           <DesktopIcon
@@ -362,6 +460,23 @@ export function Desktop() {
             onPointerDown={(e) => handleIconPointerDown(icon.id, e)}
           />
         ))}
+
+      {/* Open windows */}
+      {openWindows.map((win) => {
+        const file = ICON_FILES[win.id];
+        return (
+          <DesktopWindow
+            key={win.id}
+            title={file.title}
+            content={file.content}
+            initialX={win.initialX}
+            initialY={win.initialY}
+            zIndex={zMap[`win_${win.id}`] ?? 20}
+            onClose={() => closeWindow(win.id)}
+            onFocus={() => focusWindow(win.id)}
+          />
+        );
+      })}
     </div>
   );
 }
