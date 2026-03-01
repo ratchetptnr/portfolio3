@@ -29,7 +29,7 @@ interface OpenWindow {
 const ICON_FILES: Record<string, { title: string; content: string }> = {
   praneeth: {
     title: "Praneeth.txt",
-    content: `Praneeth Reddy
+    content: `Praneeth Potnuru
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Hey — I'm Praneeth. I design and build

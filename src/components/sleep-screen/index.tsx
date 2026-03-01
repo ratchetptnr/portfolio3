@@ -44,7 +44,7 @@ export function SleepScreen({ onWake }: { onWake: () => void }) {
           PORTFOLIO BIOS  Release 1.0.2026
         </p>
         <p className="text-[16px] font-bold text-white/50 tracking-wide leading-none">
-          Copyright (C) 2026 Praneeth Reddy. All rights reserved.
+          Copyright (C) 2026 Praneeth Potnuru. All rights reserved.
         </p>
 
         {/* Spacer */}
