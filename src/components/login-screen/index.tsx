@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function LoginScreen({ onLogin }: { onLogin: () => void }) {
+export function LoginScreen({ onLogin, onSleep }: { onLogin: () => void; onSleep: () => void }) {
   const [now, setNow]         = useState<Date | null>(null);
   const [clicked, setClicked] = useState(false);
   const [visible, setVisible] = useState(true);
@@ -109,12 +109,12 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
       </motion.button>
 
       {/* ── Bottom bar ──────────────────────────────────────────────────── */}
-      <div className="absolute bottom-8 left-0 right-0 flex items-center justify-center gap-8 text-foreground/30 text-[12px]">
-        <button className="hover:text-foreground/60 transition-colors cursor-default">
-          ↺  Restart
-        </button>
-        <button className="hover:text-foreground/60 transition-colors cursor-default">
-          ⏻  Shut Down
+      <div className="absolute bottom-8 left-0 right-0 flex items-center justify-center text-foreground/30 text-[12px]">
+        <button
+          className="hover:text-foreground/60 transition-colors cursor-default"
+          onClick={onSleep}
+        >
+          ⏾  Sleep
         </button>
       </div>
     </motion.div>

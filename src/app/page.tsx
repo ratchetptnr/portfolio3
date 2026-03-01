@@ -18,7 +18,10 @@ export default function Home() {
       {/* Login screen sits between BIOS and desktop.
           Visible during "sleep" too (BIOS overlay covers it). */}
       {stage !== "desktop" && (
-        <LoginScreen onLogin={() => setStage("desktop")} />
+        <LoginScreen
+          onLogin={() => setStage("desktop")}
+          onSleep={() => setStage("sleep")}
+        />
       )}
 
       {/* BIOS / sleep screen — topmost layer */}
