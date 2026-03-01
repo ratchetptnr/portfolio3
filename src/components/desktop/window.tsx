@@ -192,9 +192,9 @@ export function DesktopWindow({
           </span>
         </div>
 
-        {/* Scrollable text content */}
-        <div className="flex-1 bg-background overflow-y-auto min-h-0">
-          <pre className="p-6 font-mono text-[13px] text-foreground/80 leading-[1.75] whitespace-pre-wrap break-words">
+        {/* Scrollable text content — centred horizontally, text left-aligned within block */}
+        <div className="flex-1 bg-background overflow-y-auto min-h-0 flex flex-col items-center">
+          <pre className="p-6 font-mono text-[13px] text-foreground/80 leading-[1.75] whitespace-pre w-fit max-w-full">
             {content}
           </pre>
         </div>
