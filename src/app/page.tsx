@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Desktop }     from "@/components/desktop";
 import { LoginScreen } from "@/components/login-screen";
 import { SleepScreen } from "@/components/sleep-screen";
@@ -9,6 +9,13 @@ type Stage = "sleep" | "login" | "desktop";
 
 export default function Home() {
   const [stage, setStage] = useState<Stage>("sleep");
+
+  // Apple menu → Sleep fires a custom event from the menu bar (which lives in layout)
+  useEffect(() => {
+    const onSleep = () => setStage("sleep");
+    window.addEventListener("portfolio:sleep", onSleep);
+    return () => window.removeEventListener("portfolio:sleep", onSleep);
+  }, []);
 
   return (
     <>

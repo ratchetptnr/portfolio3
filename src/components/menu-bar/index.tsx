@@ -195,9 +195,12 @@ export function MenuBar() {
             <DropdownMenuItem className={ITEM_CLS}>System Preferences…</DropdownMenuItem>
             <DropdownMenuItem className={ITEM_CLS}>App Store…</DropdownMenuItem>
             <DropdownMenuSeparator className={SEP_CLS} />
-            <DropdownMenuItem className={ITEM_CLS}>Sleep</DropdownMenuItem>
-            <DropdownMenuItem className={ITEM_CLS}>Restart…</DropdownMenuItem>
-            <DropdownMenuItem className={ITEM_CLS}>Shut Down…</DropdownMenuItem>
+            <DropdownMenuItem
+              className={ITEM_CLS}
+              onClick={() => window.dispatchEvent(new CustomEvent("portfolio:sleep"))}
+            >
+              Sleep
+            </DropdownMenuItem>
             <DropdownMenuSeparator className={SEP_CLS} />
             <DropdownMenuItem className={ITEM_CLS}>Lock Screen <SC>⌃⌘Q</SC></DropdownMenuItem>
             <DropdownMenuItem className={ITEM_CLS}>Log Out… <SC>⇧⌘Q</SC></DropdownMenuItem>
